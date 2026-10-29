@@ -1,1 +1,155 @@
 
+const statusElement = document.getElementById("status");
+const profileElement = document.getElementById("profile");
+const statsElement = document.getElementById("stats");
+const reposElement = document.getElementById("repos");
+
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    cache: "no-store",
+    ...options,
+    headers: {
+      ...(options.headers || {})
+    }
+  });
+
+  if (response.status === 401) {
+    window.location.replace("/");
+    throw new Error("Please sign in again.");
+  }
+
+  if (!response.ok) {
+    throw new Error("Request failed. Please try again later.");
+  }
+
+  return response.json();
+}
+
+function addText(parent, tag, className, value) {
+  const element = document.createElement(tag);
+  element.className = className;
+  element.textContent = value || "";
+  parent.appendChild(element);
+  return element;
+}
+
+function renderProfile(user) {
+  const avatar = document.getElementById("avatar");
+  avatar.src = user.avatar_url;
+  avatar.alt = `${user.login}'s GitHub avatar`;
+
+  document.getElementById("name").textContent =
+    user.name || user.login;
+
+  const username = document.getElementById("username");
+  username.textContent = `@${user.login}`;
+  username.href = user.html_url;
+
+  document.getElementById("bio").textContent =
+    user.bio || "No bio provided.";
+
+  document.getElementById("location").textContent =
+    user.location || "Location not specified";
+
+  document.getElementById("repo-count").textContent =
+    user.public_repos;
+
+  document.getElementById("followers").textContent =
+    user.followers;
+
+  document.getElementById("following").textContent =
+    user.following;
+
+  profileElement.hidden = false;
+  statsElement.hidden = false;
+}
+
+function renderRepos(repos) {
+  reposElement.replaceChildren();
+
+  if (repos.length === 0) {
+    addText(
+      reposElement,
+      "p",
+      "muted",
+      "No public repositories found."
+    );
+    return;
+  }
+
+  for (const repo of repos) {
+    const card = document.createElement("article");
+    card.className = "repo-card";
+
+    const link = addText(card, "a", "repo-name", repo.name);
+    link.href = repo.html_url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+
+    addText(
+      card,
+      "p",
+      "repo-description",
+      repo.description || "No description provided."
+    );
+
+    const details = document.createElement("div");
+    details.className = "repo-meta";
+
+    if (repo.language) {
+      addText(details, "span", "", repo.language);
+    }
+
+    addText(
+      details,
+      "span",
+      "",
+      `★ ${repo.stargazers_count}`
+    );
+
+    addText(
+      details,
+      "span",
+      "",
+      `Forks: ${repo.forks_count}`
+    );
+
+    card.appendChild(details);
+    reposElement.appendChild(card);
+  }
+}
+
+async function loadDashboard() {
+  try {
+    const [user, repos] = await Promise.all([
+      api("/api/me"),
+      api("/api/repos")
+    ]);
+
+    renderProfile(user);
+    renderRepos(repos);
+    statusElement.hidden = true;
+  } catch (error) {
+    statusElement.textContent =
+      error.message || "Could not load your dashboard.";
+  }
+}
+
+document.getElementById("logout").addEventListener("click", async () => {
+  const button = document.getElementById("logout");
+  button.disabled = true;
+
+  try {
+    await api("/auth/logout", { method: "POST" });
+    window.location.replace("/");
+  } catch (error) {
+    statusElement.hidden = false;
+    statusElement.textContent =
+      "Could not sign out. Please refresh and try again.";
+    button.disabled = false;
+  }
+});
+
+loadDashboard();
+
